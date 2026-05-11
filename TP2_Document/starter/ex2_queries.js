@@ -1,27 +1,37 @@
 use("medical_db");
 
-db.patients.createIndex({ "$**": "text" });
-
-const q1 = db.patients.find({
+// 2.1 Trouver tous les patients diabétiques de plus de 50 ans à Alger
+const patientsDiabetiques = db.patients.find({
   "adresse.wilaya": "Alger",
   antecedents: "Diabète type 2",
   dateNaissance: { $lte: new Date(new Date().setFullYear(new Date().getFullYear() - 50)) }
 }).toArray();
-printjson(q1);
+print("\n=== 2.1 Patients diabétiques > 50 ans à Alger ===");
+printjson(patientsDiabetiques);
 
-const q2 = db.patients.find({
+// 2.2 Patients allergiques à la Pénicilline avec au moins 3 consultations
+const patientsPenicilline = db.patients.find({
   allergies: "Pénicilline",
   $expr: { $gte: [{ $size: "$consultations" }, 3] }
 }).toArray();
-printjson(q2);
+print("\n=== 2.2 Patients allergiques à la Pénicilline avec >= 3 consultations ===");
+printjson(patientsPenicilline);
 
-const q3 = db.patients.find(
+// 2.3 Projection : Nom, prénom, et dernière consultation seulement
+const projectionPatients = db.patients.find(
   {},
-  { nom: 1, prenom: 1, derniereConsultation: { $arrayElemAt: ["$consultations", -1] }, _id: 0 }
+  { 
+    nom: 1, 
+    prenom: 1, 
+    derniereConsultation: { $arrayElemAt: ["$consultations", -1] }, 
+    _id: 0 
+  }
 ).toArray();
-printjson(q3);
+print("\n=== 2.3 Projection Nom, Prénom et dernière consultation ===");
+printjson(projectionPatients);
 
-const q4 = db.patients.find({
+// 2.4 Patients sans antécédents dont la tension systolique > 140 en dernière consultation
+const patientsTension = db.patients.find({
   $or: [{ antecedents: { $exists: false } }, { antecedents: { $size: 0 } }],
   $expr: {
     $gt: [
@@ -30,9 +40,14 @@ const q4 = db.patients.find({
     ]
   }
 }).toArray();
-printjson(q4);
+print("\n=== 2.4 Patients sans antécédents avec tension systolique > 140 ===");
+printjson(patientsTension);
 
-const q5 = db.patients.find({
+// 2.5 Recherche textuelle sur les diagnostics (créer index text d'abord)
+db.patients.createIndex({ "consultations.diagnostic": "text" });
+
+const rechercheTexte = db.patients.find({
   $text: { $search: "Hypertension" }
 }).toArray();
-printjson(q5);
+print("\n=== 2.5 Recherche textuelle (Hypertension) ===");
+printjson(rechercheTexte);
