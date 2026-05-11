@@ -3,6 +3,7 @@ TP3 - Exercice 2 : Ingestion de données IoT
 Use Case : SmartGrid DZ - 10 000 capteurs, 5 minutes de mesures
 """
 from cassandra.cluster import Cluster
+from cassandra.io.asyncioreactor import AsyncioConnection
 from cassandra.query import BatchStatement, BatchType
 import uuid
 import random
@@ -24,7 +25,8 @@ COMMUNES = {
 }
 
 def connect():
-    cluster = Cluster([CASSANDRA_HOST])
+    """Connexion au cluster Cassandra avec support Python 3.12+"""
+    cluster = Cluster([CASSANDRA_HOST], connection_class=AsyncioConnection)
     session = cluster.connect(KEYSPACE)
     return session, cluster
 

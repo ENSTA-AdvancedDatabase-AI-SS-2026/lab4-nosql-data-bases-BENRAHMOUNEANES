@@ -10,6 +10,7 @@ from typing import Callable, List, Tuple
 import redis
 from pymongo import MongoClient
 from cassandra.cluster import Cluster
+from cassandra.io.asyncioreactor import AsyncioConnection
 from cassandra.query import BatchStatement, BatchType
 
 def measure_latency(fn: Callable, iterations: int = 1000) -> dict:
@@ -68,7 +69,7 @@ def benchmark_write_mongodb(n: int = 100_000):
     print(f"MongoDB Write {n} records: {elapsed:.2f}s, Throughput: {n/elapsed:.2f} rps")
 
 def benchmark_write_cassandra(n: int = 100_000):
-    cluster = Cluster(['localhost'])
+    cluster = Cluster(['localhost'], connection_class=AsyncioConnection)
     session = cluster.connect()
     session.execute("CREATE KEYSPACE IF NOT EXISTS benchmark WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};")
     session.execute("USE benchmark;")
