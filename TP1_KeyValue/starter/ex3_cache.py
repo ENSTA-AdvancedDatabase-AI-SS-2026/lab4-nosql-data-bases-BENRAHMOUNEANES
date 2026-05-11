@@ -23,39 +23,52 @@ def slow_db_get_product(product_id: int) -> Optional[dict]:
 
 
 def get_product_cached(r, product_id: int, ttl: int = 600) -> Optional[dict]:
-    """
-    Pattern Cache-Aside :
-    1. Chercher dans Redis (clé: "product_cache:{product_id}")
-    2. Si MISS → chercher dans slow_db → stocker dans Redis avec TTL
-    3. Retourner le produit
-    4. Afficher si c'est un HIT ou MISS avec la latence
-    """
     start = time.time()
-    
-    # TODO: Implémenter le pattern Cache-Aside
-    # Utiliser json.dumps/json.loads pour sérialiser
-    
+    cache_key = f"product_cache:{product_id}"
+    cached = r.get(cache_key)
+    if cached:
+        product = json.loads(cached)
+        elapsed = time.time() - start
+        print(f"CACHE HIT ({elapsed * 1000:.2f}ms)")
+        return product
+    product = slow_db_get_product(product_id)
+    if product:
+        r.set(cache_key, json.dumps(product), ex=ttl)
     elapsed = time.time() - start
-    # TODO: Afficher "CACHE HIT (Xms)" ou "CACHE MISS (Xms)"
-    pass
+    print(f"CACHE MISS ({elapsed * 1000:.2f}ms)")
+    return product
 
 
 def invalidate_product_cache(r, product_id: int):
-    """Supprimer le cache d'un produit (après mise à jour en DB)"""
-    # TODO
-    pass
+    r.delete(f"product_cache:{product_id}")
 
 
 def benchmark_cache(r, product_id: int, iterations: int = 20):
-    """
-    Effectuer 'iterations' appels à get_product_cached
-    Afficher :
-    - Temps moyen cache HIT
-    - Temps moyen cache MISS
-    - Taux de cache hit (%)
-    """
-    # TODO
-    pass
+    hits = 0
+    misses = 0
+    hit_time = 0.0
+    miss_time = 0.0
+    for _ in range(iterations):
+        start = time.time()
+        cache_key = f"product_cache:{product_id}"
+        cached = r.get(cache_key)
+        if cached:
+            hit_time += time.time() - start
+            hits += 1
+        else:
+            product = slow_db_get_product(product_id)
+            if product:
+                r.set(cache_key, json.dumps(product), ex=600)
+            miss_time += time.time() - start
+            misses += 1
+    
+    avg_hit = (hit_time / hits * 1000) if hits else 0.0
+    avg_miss = (miss_time / misses * 1000) if misses else 0.0
+    hit_rate = (hits / iterations) * 100
+    
+    print(f"Temps moyen cache HIT: {avg_hit:.2f}ms")
+    print(f"Temps moyen cache MISS: {avg_miss:.2f}ms")
+    print(f"Taux de cache hit: {hit_rate:.2f}%")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ TP1 - Exercice 4 : Classement des meilleures ventes
 Use Case : Top produits ShopFast en temps réel
 """
 import redis
+from typing import Optional
 
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
@@ -10,40 +11,21 @@ LEADERBOARD_KEY = "leaderboard:sales"
 
 
 def record_sale(r, product_id, quantity: int = 1):
-    """
-    Enregistrer une vente dans le classement
-    Utiliser ZINCRBY sur la clé LEADERBOARD_KEY
-    """
-    # TODO
-    pass
+    r.zincrby(LEADERBOARD_KEY, quantity, product_id)
 
 
 def get_top_products(r, n: int = 10) -> list:
-    """
-    Retourner les N produits les plus vendus
-    Format : [{"product_id": "1", "sales": 150}, ...]
-    Astuce : ZREVRANGE avec WITHSCORES
-    """
-    # TODO
-    pass
+    top = r.zrevrange(LEADERBOARD_KEY, 0, n - 1, withscores=True)
+    return [{"product_id": str(p), "sales": s} for p, s in top]
 
 
 def get_product_rank(r, product_id) -> Optional[int]:
-    """
-    Retourner le rang 1-based d'un produit
-    (1 = best seller, None si pas dans le classement)
-    """
-    # TODO: ZREVRANK retourne 0-based, convertir en 1-based
-    pass
+    rank = r.zrevrank(LEADERBOARD_KEY, product_id)
+    return rank + 1 if rank is not None else None
 
 
 def get_products_between_ranks(r, start_rank: int, end_rank: int) -> list:
-    """
-    Retourner les produits entre les rangs start et end (1-based)
-    Ex: rangs 3 à 7 → 5 produits
-    """
-    # TODO
-    pass
+    return r.zrevrange(LEADERBOARD_KEY, start_rank - 1, end_rank - 1)
 
 
 def simulate_sales_day(r, n_sales: int = 500):

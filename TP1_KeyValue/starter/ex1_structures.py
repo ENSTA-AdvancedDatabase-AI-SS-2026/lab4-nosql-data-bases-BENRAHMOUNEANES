@@ -9,79 +9,40 @@ r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 
 def store_product(r, product_id, product_data: dict):
-    """
-    Stocker un produit comme Hash Redis
-    Clé : "product:{product_id}"
-    Champs : name, price, category, stock
-    
-    >>> store_product(r, 1, {"name": "Samsung A54", "price": 65000, "category": "phones", "stock": 15})
-    """
-    # TODO: Implémenter avec HSET
-    pass
+    r.hset(f"product:{product_id}", mapping=product_data)
 
 
 def get_product(r, product_id):
-    """
-    Récupérer un produit par son ID
-    Retourner None si le produit n'existe pas
-    """
-    # TODO: Implémenter avec HGETALL
-    pass
+    product = r.hgetall(f"product:{product_id}")
+    return product if product else None
 
 
 def add_to_cart(r, user_id, product_id, quantity: int = 1):
-    """
-    Ajouter/incrémenter un produit dans le panier
-    Clé : "cart:{user_id}"
-    Champ : product_id → quantité
-    """
-    # TODO: Implémenter avec HINCRBY
-    pass
+    r.hincrby(f"cart:{user_id}", str(product_id), quantity)
 
 
 def get_cart(r, user_id):
-    """
-    Récupérer tout le contenu du panier d'un utilisateur
-    Retourner un dict {product_id: quantity}
-    """
-    # TODO
-    pass
+    cart = r.hgetall(f"cart:{user_id}")
+    return {k: int(v) for k, v in cart.items()}
 
 
 def record_view(r, user_id, product_id, max_history: int = 10):
-    """
-    Enregistrer un produit vu par l'utilisateur
-    Clé : "history:{user_id}" (List)
-    Garder seulement les max_history derniers produits
-    Astuce : LPUSH + LTRIM
-    """
-    # TODO
-    pass
+    key = f"history:{user_id}"
+    r.lpush(key, product_id)
+    r.ltrim(key, 0, max_history - 1)
 
 
 def get_history(r, user_id):
-    """Récupérer l'historique de navigation"""
-    # TODO
-    pass
+    return r.lrange(f"history:{user_id}", 0, -1)
 
 
 def add_product_to_category(r, category: str, product_id):
-    """
-    Associer un produit à une catégorie
-    Clé : "category:{category}" (Set)
-    """
-    # TODO: Utiliser SADD
-    pass
+    r.sadd(f"category:{category}", product_id)
 
 
 def get_products_in_categories(r, *categories):
-    """
-    Récupérer les produits appartenant à TOUTES les catégories données
-    Ex: produits qui sont à la fois "electronics" ET "promo"
-    Astuce : SINTER
-    """
-    # TODO
-    pass
+    keys = [f"category:{cat}" for cat in categories]
+    return list(r.sinter(keys)) if keys else []
 
 
 if __name__ == "__main__":

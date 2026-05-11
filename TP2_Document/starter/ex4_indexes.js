@@ -1,46 +1,31 @@
-/**
- * TP2 - Exercice 4 : Index et Optimisation
- */
-
 use("medical_db");
 
-// ─── 4.1 : Créer les index appropriés ────────────────────────────────────────
+db.patients.createIndex({ "adresse.wilaya": 1, antecedents: 1 });
 
-// Index 1 : Recherche fréquente par wilaya + antécédents
-// TODO: Créer l'index composé approprié
-// db.patients.createIndex({ ... });
+db.patients.createIndex({ "consultations.date": -1 });
 
-// Index 2 : Recherche par date de consultation
-// TODO:
-// db.patients.createIndex({ ... });
+db.patients.createIndex({ "consultations.diagnostic": "text" });
 
-// Index 3 : Texte sur diagnostics pour recherche full-text
-// TODO:
-// db.patients.createIndex({ ... });
+db.analyses.createIndex({ "patient_id": 1 });
 
-// Index 4 : Analyses par patient (lookup)
-// TODO:
-// db.analyses.createIndex({ ... });
-
-
-// ─── 4.2 : Comparer avec explain() ────────────────────────────────────────────
-
-// Requête de test
 const requeteTest = {
   "adresse.wilaya": "Alger",
   antecedents: "Diabète type 2"
 };
 
 print("=== AVANT index ===");
-// TODO: Exécuter avec explain("executionStats") et afficher les métriques
+// we will drop the index to test before
+db.patients.dropIndex("adresse.wilaya_1_antecedents_1");
+let stats_avant = db.patients.find(requeteTest).explain("executionStats");
+print(`nReturned: ${stats_avant.executionStats.nReturned}`);
+print(`totalDocsExamined: ${stats_avant.executionStats.totalDocsExamined}`);
+print(`executionTimeMillis: ${stats_avant.executionStats.executionTimeMillis}`);
 
 print("\n=== APRÈS index ===");
-// TODO: Après création de l'index, même requête avec explain()
-// Comparer : nReturned, totalDocsExamined, executionTimeMillis
+db.patients.createIndex({ "adresse.wilaya": 1, antecedents: 1 });
+let stats_apres = db.patients.find(requeteTest).explain("executionStats");
+print(`nReturned: ${stats_apres.executionStats.nReturned}`);
+print(`totalDocsExamined: ${stats_apres.executionStats.totalDocsExamined}`);
+print(`executionTimeMillis: ${stats_apres.executionStats.executionTimeMillis}`);
 
-// ─── 4.4 : Index TTL pour archivage ───────────────────────────────────────────
-// TODO: Créer un index TTL sur analyses.date pour expirer après 5 ans
-// db.analyses.createIndex(
-//   { date: 1 },
-//   { expireAfterSeconds: ??? }
-// );
+db.analyses.createIndex({ date: 1 }, { expireAfterSeconds: 157680000 });

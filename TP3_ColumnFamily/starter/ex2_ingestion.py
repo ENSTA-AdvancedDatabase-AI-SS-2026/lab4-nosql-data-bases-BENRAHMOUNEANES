@@ -9,7 +9,6 @@ import random
 from datetime import datetime, timedelta
 import time
 
-# Configuration
 CASSANDRA_HOST = 'localhost'
 KEYSPACE = 'smartgrid'
 NB_CAPTEURS = 10000
@@ -25,71 +24,74 @@ COMMUNES = {
 }
 
 def connect():
-    """Connexion au cluster Cassandra"""
     cluster = Cluster([CASSANDRA_HOST])
     session = cluster.connect(KEYSPACE)
     return session, cluster
 
-
 def generate_mesure(capteur_id, wilaya, commune, timestamp):
-    """Générer une mesure réaliste pour un capteur"""
-    tension_base = 220  # Volts (réseau algérien)
-    
+    tension_base = 220
     return {
         "capteur_id": capteur_id,
         "date_jour": timestamp.date(),
         "timestamp": timestamp,
         "wilaya": wilaya,
         "commune": commune,
-        # Variation normale ± 10V
         "tension_v": round(tension_base + random.gauss(0, 5), 2),
         "courant_a": round(random.uniform(0.5, 15.0), 2),
         "puissance_kw": round(random.uniform(0.1, 3.3), 3),
         "frequence_hz": round(50 + random.gauss(0, 0.1), 2),
         "temperature": round(random.uniform(20, 65), 1),
-        # 5% de chance d'alerte
         "alerte": random.random() < 0.05,
+        "code_alerte": "VOLT_WARN" if random.random() < 0.05 else None
     }
 
-
-def insert_single(session, mesure):
-    """
-    TODO: Insérer une seule mesure dans mesures_par_capteur
-    Utiliser une prepared statement
-    """
-    pass
-
-
-def insert_batch(session, mesures: list):
-    """
-    TODO: Insérer un batch de mesures de manière efficace
-    Utiliser UNLOGGED BATCH pour les séries temporelles
-    Faire des batches de max 50 items (bonne pratique Cassandra)
-    """
-    pass
-
-
 def run_ingestion(session):
-    """
-    TODO: Générer et insérer NB_CAPTEURS × MINUTES_HISTORIQUE mesures
-    1. Générer les capteurs (ID aléatoires + assignation wilaya/commune)
-    2. Pour chaque minute des MINUTES_HISTORIQUE dernières minutes
-       → Insérer les mesures de tous les capteurs
-    3. Mesurer et afficher :
-       - Nombre total d'insertions
-       - Durée totale
-       - Débit (mesures/seconde)
-    """
     print(f"Démarrage ingestion : {NB_CAPTEURS} capteurs × {MINUTES_HISTORIQUE} min")
     start = time.time()
     
-    # TODO: Implémenter
+    capteurs = []
+    for _ in range(NB_CAPTEURS):
+        w = random.choice(WILAYAS)
+        c = random.choice(COMMUNES[w])
+        capteurs.append((uuid.uuid4(), w, c))
     
-    elapsed = time.time() - start
-    total = NB_CAPTEURS * MINUTES_HISTORIQUE
-    print(f"\n✅ {total:,} mesures insérées en {elapsed:.1f}s")
-    print(f"   Débit : {total/elapsed:,.0f} mesures/seconde")
+    insert_stmt = session.prepare('''
+        INSERT INTO mesures_par_capteur (capteur_id, date_jour, timestamp, wilaya, commune, tension_v, courant_a, puissance_kw, frequence_hz, temperature, alerte, code_alerte)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''')
 
+    alert_stmt = session.prepare('''
+        INSERT INTO alertes_par_wilaya (wilaya, date_jour, timestamp, capteur_id, code_alerte, description, gravite, resolue)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''')
+
+    now = datetime.now()
+    batch = BatchStatement(batch_type=BatchType.UNLOGGED)
+    
+    total_inserted = 0
+    
+    for m in range(MINUTES_HISTORIQUE):
+        current_time = now - timedelta(minutes=m)
+        date_str = current_time.strftime('%Y-%m-%d')
+        for i, (cid, w, c) in enumerate(capteurs):
+            mesure = generate_mesure(cid, w, c, current_time)
+            batch.add(insert_stmt, (mesure["capteur_id"], date_str, mesure["timestamp"], mesure["wilaya"], mesure["commune"], mesure["tension_v"], mesure["courant_a"], mesure["puissance_kw"], mesure["frequence_hz"], mesure["temperature"], mesure["alerte"], mesure["code_alerte"]))
+            
+            if mesure["alerte"]:
+                batch.add(alert_stmt, (mesure["wilaya"], date_str, mesure["timestamp"], mesure["capteur_id"], mesure["code_alerte"] or "WARN", "Alerte générée", 2, False))
+            
+            if len(batch) >= 50:
+                session.execute(batch)
+                batch.clear()
+                total_inserted += 50
+    
+    if len(batch) > 0:
+        session.execute(batch)
+        total_inserted += len(batch)
+
+    elapsed = time.time() - start
+    print(f"\\n✅ {total_inserted:,} opérations insérées en {elapsed:.1f}s")
+    print(f"   Débit : {total_inserted/elapsed:,.0f} requêtes/seconde")
 
 if __name__ == "__main__":
     session, cluster = connect()

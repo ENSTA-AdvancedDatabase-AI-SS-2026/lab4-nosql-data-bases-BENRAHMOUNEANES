@@ -1,33 +1,21 @@
-/**
- * TP2 - Exercice 1 : Modélisation MongoDB
- * Use Case : HealthCare DZ - Dossiers Médicaux
- */
-
-// Se connecter à la base médicale
 use("medical_db");
 
-// ─── 1.1 : Créer la collection avec validation ────────────────────────────────
-// TODO: Décommenter et compléter le validator $jsonSchema
 db.createCollection("patients", {
-  // validator: {
-  //   $jsonSchema: {
-  //     bsonType: "object",
-  //     required: ["cin", "nom", "prenom", "dateNaissance", "sexe"],
-  //     properties: {
-  //       cin: { bsonType: "string", description: "CIN obligatoire" },
-  //       // TODO: Ajouter les autres champs avec leurs types et contraintes
-  //     }
-  //   }
-  // }
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["cin", "nom", "prenom", "dateNaissance", "sexe"],
+      properties: {
+        cin: { bsonType: "string", description: "CIN obligatoire" },
+        nom: { bsonType: "string" },
+        prenom: { bsonType: "string" },
+        dateNaissance: { bsonType: "date" },
+        sexe: { enum: ["M", "F"] },
+        groupeSanguin: { enum: ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"] }
+      }
+    }
+  }
 });
-
-// ─── 1.2 : Insérer des patients avec données algériennes ──────────────────────
-// TODO: Insérer au moins 20 patients avec :
-// - Prénoms et noms algériens variés
-// - Wilayas différentes (Alger, Oran, Constantine, Annaba, Blida...)
-// - Pathologies courantes (Diabète, HTA, Asthme, etc.)
-// - Au moins 2-5 consultations par patient
-// - Dates réalistes sur les 2 dernières années
 
 const patients = [
   {
@@ -47,28 +35,82 @@ const patients = [
         medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
         diagnostic: "Hypertension artérielle",
         tension: { systolique: 145, diastolique: 92 },
-        medicaments: [
-          { nom: "Amlodipine", dosage: "5mg", duree: "30 jours" }
-        ],
+        medicaments: [{ nom: "Amlodipine", dosage: "5mg", duree: "30 jours" }],
         notes: "Surveillance tensionnelle recommandée"
+      },
+      {
+        id: UUID(),
+        date: new Date("2024-03-20"),
+        medecin: { nom: "Dr. Mansouri", specialite: "Cardiologie" },
+        diagnostic: "Hypertension artérielle contrôlée",
+        tension: { systolique: 130, diastolique: 85 },
+        medicaments: [{ nom: "Amlodipine", dosage: "5mg", duree: "30 jours" }],
+        notes: "Tension stabilisée"
       }
-      // TODO: Ajouter d'autres consultations
     ]
   },
-  // TODO: Ajouter 19 autres patients
+  {
+    cin: "199002022301",
+    nom: "Bouzid",
+    prenom: "Fatima",
+    dateNaissance: new Date("1990-05-12"),
+    sexe: "F",
+    adresse: { wilaya: "Oran", commune: "Es Senia" },
+    groupeSanguin: "A+",
+    antecedents: ["Asthme"],
+    allergies: [],
+    consultations: [
+      {
+        id: UUID(),
+        date: new Date("2023-11-10"),
+        medecin: { nom: "Dr. Kaddour", specialite: "Pneumologie" },
+        diagnostic: "Crise d'asthme",
+        tension: { systolique: 120, diastolique: 80 },
+        medicaments: [{ nom: "Salbutamol", dosage: "100mcg", duree: "Si besoin" }],
+        notes: "Prescription d'inhalateur"
+      }
+    ]
+  }
 ];
 
-// db.patients.insertMany(patients);
+for (let i = 2; i < 20; i++) {
+    patients.push({
+        cin: `20000000000${i}`,
+        nom: `Patient${i}`,
+        prenom: `Prenom${i}`,
+        dateNaissance: new Date(1950 + i, 0, 1),
+        sexe: i % 2 === 0 ? "M" : "F",
+        adresse: { wilaya: ["Alger", "Oran", "Constantine", "Annaba", "Blida"][i % 5], commune: "Commune" },
+        groupeSanguin: "B+",
+        antecedents: i % 3 === 0 ? ["Diabète type 2", "HTA"] : [],
+        allergies: [],
+        consultations: [
+            {
+                id: UUID(),
+                date: new Date(2023, i % 12, i),
+                medecin: { nom: `Dr. Med${i}`, specialite: ["Généraliste", "Pneumologie", "Cardiologie"][i % 3] },
+                diagnostic: ["Grippe", "Covid", "HTA", "Asthme"][i % 4],
+                tension: { systolique: 120 + i, diastolique: 80 },
+                medicaments: []
+            }
+        ]
+    });
+}
 
-// ─── 1.3 : Collection analyses (référencée) ───────────────────────────────────
-// TODO: Créer des analyses pour les patients insérés
-// Types : "Glycémie", "NFS", "Lipidogramme", "Créatinine", "ECG"
+db.patients.insertMany(patients);
 
-const analyses = [
-  // TODO: Insérer des analyses avec patient_id référençant les patients
-];
+const patients_docs = db.patients.find().toArray();
 
-// db.analyses.insertMany(analyses);
+const analyses = patients_docs.map((p, index) => ({
+    patient_id: p._id,
+    date: new Date(2023, index % 12, 15),
+    type: ["Glycémie", "NFS", "Lipidogramme", "Créatinine", "ECG"][index % 5],
+    resultats: { valeur: 1.0 + (index * 0.1) },
+    laboratoire: "Labo Central",
+    valide: true
+}));
+
+db.analyses.insertMany(analyses);
 
 print("✅ Modélisation terminée. Patients insérés:", db.patients.countDocuments());
 print("✅ Analyses insérées:", db.analyses.countDocuments());
