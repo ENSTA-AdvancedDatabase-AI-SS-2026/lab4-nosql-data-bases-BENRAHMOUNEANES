@@ -1,57 +1,46 @@
 use("medical_db");
 
-print("=== 3.1 : Top diagnostics par wilaya ===");
-const diagParWilaya = db.patients.aggregate([
+print("--- 3.1: Diag distribution by wilaya ---");
+const d1 = db.patients.aggregate([
   { $unwind: "$consultations" },
-  { $group: { _id: { wilaya: "$adresse.wilaya", diagnostic: "$consultations.diagnostic" }, count: { $sum: 1 } } },
-  { $sort: { count: -1 } },
-  { $limit: 20 }
+  { $group: { _id: { w: "$adresse.wilaya", d: "$consultations.diagnostic" }, total: { $sum: 1 } } },
+  { $sort: { total: -1 } }
 ]).toArray();
-printjson(diagParWilaya);
+printjson(d1);
 
-print("\n=== 3.2 : Top médicaments par spécialité ===");
-const medsParSpecialite = db.patients.aggregate([
+print("--- 3.2: Top meds by spec ---");
+const d2 = db.patients.aggregate([
   { $unwind: "$consultations" },
   { $unwind: "$consultations.medicaments" },
-  { $group: { _id: { specialite: "$consultations.medecin.specialite", medicament: "$consultations.medicaments.nom" }, count: { $sum: 1 } } },
-  { $sort: { count: -1 } },
-  { $group: { _id: "$_id.specialite", top_medicament: { $first: "$_id.medicament" }, count: { $first: "$count" } } }
+  { $group: { _id: { s: "$consultations.medecin.specialite", m: "$consultations.medicaments.nom" }, n: { $sum: 1 } } },
+  { $sort: { n: -1 } },
+  { $group: { _id: "$_id.s", best: { $first: "$_id.m" }, qty: { $first: "$n" } } }
 ]).toArray();
-printjson(medsParSpecialite);
+printjson(d2);
 
-print("\n=== 3.3 : Consultations par mois (12 derniers mois) ===");
-const evolutionMensuelle = db.patients.aggregate([
+print("--- 3.3: Monthly stats ---");
+const d3 = db.patients.aggregate([
   { $unwind: "$consultations" },
-  { $match: { "consultations.date": { $gte: new Date(new Date().setFullYear(new Date().getFullYear() - 1)) } } },
-  { $group: { _id: { annee: { $year: "$consultations.date" }, mois: { $month: "$consultations.date" } }, count: { $sum: 1 } } },
-  { $sort: { "_id.annee": 1, "_id.mois": 1 } },
-  { $project: { month_year: { $concat: [{ $toString: "$_id.annee" }, "-", { $toString: "$_id.mois" }] }, count: 1, _id: 0 } }
+  { $group: { _id: { y: { $year: "$consultations.date" }, m: { $month: "$consultations.date" } }, count: { $sum: 1 } } },
+  { $sort: { "_id.y": 1, "_id.m": 1 } }
 ]).toArray();
-printjson(evolutionMensuelle);
+printjson(d3);
 
-print("\n=== 3.4 : Profil patients à risque élevé ===");
-const patientsRisque = db.patients.aggregate([
-  { $match: { antecedents: { $all: ["Diabète type 2", "HTA"] } } },
-  { $addFields: { age: { $divide: [{ $subtract: [new Date(), "$dateNaissance"] }, 31536000000] }, consultations_count: { $size: "$consultations" } } },
-  { $match: { age: { $gte: 60 } } },
-  { $group: { _id: null, avg_consultations: { $avg: "$consultations_count" }, total_patients: { $sum: 1 } } }
+print("--- 3.4: High risk profile ---");
+const d4 = db.patients.aggregate([
+  { $match: { antecedents: { $in: ["Diabète", "HTA"] } } },
+  { $project: { num_cons: { $size: "$consultations" } } },
+  { $group: { _id: null, avg: { $avg: "$num_cons" }, total: { $sum: 1 } } }
 ]).toArray();
-printjson(patientsRisque);
+printjson(d4);
 
-print("\n=== 3.5 : Top 5 médecins & taux de ré-consultation ===");
-const rapportMedecins = db.patients.aggregate([
+print("--- 3.5: Doctor leaderboard ---");
+const d5 = db.patients.aggregate([
   { $unwind: "$consultations" },
-  { $group: { _id: "$consultations.medecin.nom", patients_uniques: { $addToSet: "$_id" }, total_consultations: { $sum: 1 } } },
-  { $addFields: { 
-      patients_uniques_count: { $size: "$patients_uniques" },
-      taux_reconsultation: { 
-          $multiply: [ 
-              { $divide: [ { $subtract: ["$total_consultations", { $size: "$patients_uniques" }] }, { $size: "$patients_uniques" } ] }, 
-              100 
-          ] 
-      } 
-  }},
-  { $sort: { total_consultations: -1 } },
+  { $group: { _id: "$consultations.medecin.nom", total: { $sum: 1 }, users: { $addToSet: "$_id" } } },
+  { $project: { total: 1, u_count: { $size: "$users" } } },
+  { $addFields: { rate: { $multiply: [{ $divide: [{ $subtract: ["$total", "$u_count"] }, "$u_count"] }, 100] } } },
+  { $sort: { total: -1 } },
   { $limit: 5 }
 ]).toArray();
-printjson(rapportMedecins);
+printjson(d5);

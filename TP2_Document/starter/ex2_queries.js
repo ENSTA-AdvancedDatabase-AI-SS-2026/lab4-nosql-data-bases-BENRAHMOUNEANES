@@ -1,53 +1,34 @@
 use("medical_db");
 
-// 2.1 Trouver tous les patients diabétiques de plus de 50 ans à Alger
-const patientsDiabetiques = db.patients.find({
+print("--- 2.1 Diabetics > 50 in Alger ---");
+const q21 = db.patients.find({
   "adresse.wilaya": "Alger",
-  antecedents: "Diabète type 2",
-  dateNaissance: { $lte: new Date(new Date().setFullYear(new Date().getFullYear() - 50)) }
+  antecedents: "Diabète",
+  dateNaissance: { $lt: new Date(1974, 0, 1) }
 }).toArray();
-print("\n=== 2.1 Patients diabétiques > 50 ans à Alger ===");
-printjson(patientsDiabetiques);
+print("Count:", q21.length);
 
-// 2.2 Patients allergiques à la Pénicilline avec au moins 3 consultations
-const patientsPenicilline = db.patients.find({
+print("--- 2.2 Penicillin Allergy & 3+ Cons ---");
+const q22 = db.patients.find({
   allergies: "Pénicilline",
-  $expr: { $gte: [{ $size: "$consultations" }, 3] }
+  "consultations.2": { $exists: true }
 }).toArray();
-print("\n=== 2.2 Patients allergiques à la Pénicilline avec >= 3 consultations ===");
-printjson(patientsPenicilline);
+print("Count:", q22.length);
 
-// 2.3 Projection : Nom, prénom, et dernière consultation seulement
-const projectionPatients = db.patients.find(
-  {},
-  { 
-    nom: 1, 
-    prenom: 1, 
-    derniereConsultation: { $arrayElemAt: ["$consultations", -1] }, 
-    _id: 0 
-  }
-).toArray();
-print("\n=== 2.3 Projection Nom, Prénom et dernière consultation ===");
-printjson(projectionPatients);
+print("--- 2.3 Last Consultation Projection ---");
+const q23 = db.patients.find({}, {
+  nom: 1, prenom: 1, last_cons: { $slice: ["$consultations", -1] }, _id: 0
+}).limit(3).toArray();
+printjson(q23);
 
-// 2.4 Patients sans antécédents dont la tension systolique > 140 en dernière consultation
-const patientsTension = db.patients.find({
-  $or: [{ antecedents: { $exists: false } }, { antecedents: { $size: 0 } }],
-  $expr: {
-    $gt: [
-      { $let: { vars: { last_consultation: { $arrayElemAt: ["$consultations", -1] } }, in: "$$last_consultation.tension.systolique" } },
-      140
-    ]
-  }
+print("--- 2.4 No history, high tension ---");
+const q24 = db.patients.find({
+  $or: [{ antecedents: { $size: 0 } }, { antecedents: { $exists: false } }],
+  "consultations.tension.systolique": { $gt: 140 }
 }).toArray();
-print("\n=== 2.4 Patients sans antécédents avec tension systolique > 140 ===");
-printjson(patientsTension);
+print("Count:", q24.length);
 
-// 2.5 Recherche textuelle sur les diagnostics (créer index text d'abord)
+print("--- 2.5 Text Search ---");
 db.patients.createIndex({ "consultations.diagnostic": "text" });
-
-const rechercheTexte = db.patients.find({
-  $text: { $search: "Hypertension" }
-}).toArray();
-print("\n=== 2.5 Recherche textuelle (Hypertension) ===");
-printjson(rechercheTexte);
+const q25 = db.patients.find({ $text: { $search: "Diabète" } }).toArray();
+print("Found:", q25.length);

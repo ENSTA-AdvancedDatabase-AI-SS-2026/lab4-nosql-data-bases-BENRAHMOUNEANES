@@ -7,30 +7,24 @@ import uuid
 
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-def create_session(r, user_id: str) -> str:
-    """Créer une session avec TTL de 30 minutes (1800s)"""
-    session_id = str(uuid.uuid4())
-    session_key = f"session:{session_id}"
-    r.set(session_key, user_id, ex=1800)
-    return session_id
+def create_session(r, user_id, ttl=1800):
+    sid = str(uuid.uuid4())
+    r.set(f"sess:{sid}", user_id, ex=ttl)
+    return sid
 
-def get_session(r, session_id: str) -> str:
-    """Récupérer la session et renouveler le TTL (sliding expiration)"""
-    session_key = f"session:{session_id}"
-    user_id = r.get(session_key)
-    if user_id:
-        r.expire(session_key, 1800)
-    return user_id
+def get_session_user(r, sid):
+    k = f"sess:{sid}"
+    uid = r.get(k)
+    if uid:
+        r.expire(k, 1800)
+    return uid
 
-def delete_session(r, session_id: str):
-    """Supprimer la session"""
-    session_key = f"session:{session_id}"
-    r.delete(session_key)
+def kill_session(r, sid):
+    r.delete(f"sess:{sid}")
 
 if __name__ == "__main__":
     r.flushdb()
-    sid = create_session(r, "user:42")
-    print(f"Created session: {sid} for user:42")
-    print(f"Get session: {get_session(r, sid)}")
-    delete_session(r, sid)
-    print(f"After deletion: {get_session(r, sid)}")
+    token = create_session(r, "anes_b")
+    print(f"Token: {token}")
+    print(f"User: {get_session_user(r, token)}")
+    kill_session(r, token)

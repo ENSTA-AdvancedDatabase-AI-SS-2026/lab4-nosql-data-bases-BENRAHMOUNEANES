@@ -7,48 +7,24 @@ from typing import Optional
 
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-LEADERBOARD_KEY = "leaderboard:sales"
+KEY = "sales_rank"
 
+def add_sale(r, pid, qty: int = 1):
+    r.zincrby(KEY, qty, pid)
 
-def record_sale(r, product_id, quantity: int = 1):
-    r.zincrby(LEADERBOARD_KEY, quantity, product_id)
+def get_top(r, limit: int = 10):
+    res = r.zrevrange(KEY, 0, limit - 1, withscores=True)
+    return [{"id": p, "val": s} for p, s in res]
 
+def get_rank(r, pid):
+    rk = r.zrevrank(KEY, pid)
+    return rk + 1 if rk is not None else None
 
-def get_top_products(r, n: int = 10) -> list:
-    top = r.zrevrange(LEADERBOARD_KEY, 0, n - 1, withscores=True)
-    return [{"product_id": str(p), "sales": s} for p, s in top]
-
-
-def get_product_rank(r, product_id) -> Optional[int]:
-    rank = r.zrevrank(LEADERBOARD_KEY, product_id)
-    return rank + 1 if rank is not None else None
-
-
-def get_products_between_ranks(r, start_rank: int, end_rank: int) -> list:
-    return r.zrevrange(LEADERBOARD_KEY, start_rank - 1, end_rank - 1)
-
-
-def simulate_sales_day(r, n_sales: int = 500):
-    """
-    Simuler une journée de ventes aléatoires
-    Générer n_sales ventes aléatoires sur les produits 1-20
-    """
-    import random
-    products = list(range(1, 21))
-    for _ in range(n_sales):
-        product_id = random.choice(products)
-        qty = random.randint(1, 5)
-        record_sale(r, product_id, qty)
-
+def get_range(r, low, high):
+    return r.zrevrange(KEY, low - 1, high - 1)
 
 if __name__ == "__main__":
     r.flushdb()
-    
-    print("Simulation de ventes...")
-    simulate_sales_day(r, 500)
-    
-    print("\n🏆 Top 5 produits:")
-    for i, p in enumerate(get_top_products(r, 5), 1):
-        print(f"  {i}. Produit #{p['product_id']} — {int(p['sales'])} ventes")
-    
-    print(f"\nRang du produit #1: {get_product_rank(r, 1)}")
+    for _ in range(10): add_sale(r, "prod_A", 2)
+    print("Top:", get_top(r, 5))
+    print("Rank A:", get_rank(r, "prod_A"))

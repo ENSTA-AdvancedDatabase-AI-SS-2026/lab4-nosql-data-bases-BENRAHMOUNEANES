@@ -22,64 +22,40 @@ def slow_db_get_product(product_id: int) -> Optional[dict]:
     return products.get(product_id)
 
 
-def get_product_cached(r, product_id: int, ttl: int = 600) -> Optional[dict]:
-    start = time.time()
-    cache_key = f"product_cache:{product_id}"
-    cached = r.get(cache_key)
-    if cached:
-        product = json.loads(cached)
-        elapsed = time.time() - start
-        print(f"CACHE HIT ({elapsed * 1000:.2f}ms)")
-        return product
-    product = slow_db_get_product(product_id)
-    if product:
-        r.set(cache_key, json.dumps(product), ex=ttl)
-    elapsed = time.time() - start
-    print(f"CACHE MISS ({elapsed * 1000:.2f}ms)")
-    return product
+def get_product_cached(r, pid: int, exp: int = 600) -> Optional[dict]:
+    t0 = time.time()
+    k = f"cache:prod:{pid}"
+    data = r.get(k)
+    
+    if data:
+        ms = (time.time() - t0) * 1000
+        print(f"HIT [{ms:.2f}ms]")
+        return json.loads(data)
+    
+    item = slow_db_get_product(pid)
+    if item:
+        r.setex(k, exp, json.dumps(item))
+    
+    ms = (time.time() - t0) * 1000
+    print(f"MISS [{ms:.2f}ms]")
+    return item
 
+def clear_cache(r, pid: int):
+    r.delete(f"cache:prod:{pid}")
 
-def invalidate_product_cache(r, product_id: int):
-    r.delete(f"product_cache:{product_id}")
-
-
-def benchmark_cache(r, product_id: int, iterations: int = 20):
-    hits = 0
-    misses = 0
-    hit_time = 0.0
-    miss_time = 0.0
-    for _ in range(iterations):
-        start = time.time()
-        cache_key = f"product_cache:{product_id}"
-        cached = r.get(cache_key)
-        if cached:
-            hit_time += time.time() - start
-            hits += 1
+def run_bench(r, pid: int, count: int = 20):
+    stats = {"hits": 0, "misses": 0}
+    for _ in range(count):
+        k = f"cache:prod:{pid}"
+        if r.get(k): stats["hits"] += 1
         else:
-            product = slow_db_get_product(product_id)
-            if product:
-                r.set(cache_key, json.dumps(product), ex=600)
-            miss_time += time.time() - start
-            misses += 1
-    
-    avg_hit = (hit_time / hits * 1000) if hits else 0.0
-    avg_miss = (miss_time / misses * 1000) if misses else 0.0
-    hit_rate = (hits / iterations) * 100
-    
-    print(f"Temps moyen cache HIT: {avg_hit:.2f}ms")
-    print(f"Temps moyen cache MISS: {avg_miss:.2f}ms")
-    print(f"Taux de cache hit: {hit_rate:.2f}%")
-
+            p = slow_db_get_product(pid)
+            if p: r.setex(k, 600, json.dumps(p))
+            stats["misses"] += 1
+    print(f"Stats: {stats}")
 
 if __name__ == "__main__":
     r.flushdb()
-    
-    print("=== Test Cache-Aside ===")
-    print("\nPremier appel (MISS attendu):")
     get_product_cached(r, 1)
-    
-    print("\nDeuxième appel (HIT attendu):")
     get_product_cached(r, 1)
-    
-    print("\n=== Benchmark ===")
-    benchmark_cache(r, 1, iterations=10)
+    run_bench(r, 2, 5)

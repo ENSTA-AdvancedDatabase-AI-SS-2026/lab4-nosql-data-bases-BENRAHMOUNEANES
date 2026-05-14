@@ -8,57 +8,38 @@ import json
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 
-def store_product(r, product_id, product_data: dict):
-    r.hset(f"product:{product_id}", mapping=product_data)
+def store_product(r, pid, data: dict):
+    r.hset(f"item:{pid}", mapping=data)
 
+def get_product(r, pid):
+    res = r.hgetall(f"item:{pid}")
+    return res if len(res) > 0 else None
 
-def get_product(r, product_id):
-    product = r.hgetall(f"product:{product_id}")
-    return product if product else None
+def add_to_cart(r, uid, pid, qty: int = 1):
+    r.hincrby(f"basket:{uid}", pid, qty)
 
+def get_cart(r, uid):
+    return r.hgetall(f"basket:{uid}")
 
-def add_to_cart(r, user_id, product_id, quantity: int = 1):
-    r.hincrby(f"cart:{user_id}", str(product_id), quantity)
+def record_view(r, uid, pid, limit: int = 10):
+    k = f"recent:{uid}"
+    r.lpush(k, pid)
+    r.ltrim(k, 0, limit - 1)
 
+def get_history(r, uid):
+    return r.lrange(f"recent:{uid}", 0, -1)
 
-def get_cart(r, user_id):
-    cart = r.hgetall(f"cart:{user_id}")
-    return {k: int(v) for k, v in cart.items()}
+def add_product_to_category(r, cat: str, pid):
+    r.sadd(f"tag:{cat}", pid)
 
-
-def record_view(r, user_id, product_id, max_history: int = 10):
-    key = f"history:{user_id}"
-    r.lpush(key, product_id)
-    r.ltrim(key, 0, max_history - 1)
-
-
-def get_history(r, user_id):
-    return r.lrange(f"history:{user_id}", 0, -1)
-
-
-def add_product_to_category(r, category: str, product_id):
-    r.sadd(f"category:{category}", product_id)
-
-
-def get_products_in_categories(r, *categories):
-    keys = [f"category:{cat}" for cat in categories]
-    return list(r.sinter(keys)) if keys else []
-
+def get_products_in_categories(r, *cats):
+    tags = [f"tag:{c}" for c in cats]
+    return r.sinter(tags) if tags else []
 
 if __name__ == "__main__":
-    # Test manuel
-    r.flushdb()  # Nettoyer pour les tests
-    
-    # Stocker quelques produits
-    store_product(r, 1, {"name": "Samsung A54", "price": "65000", "category": "phones", "stock": "15"})
-    store_product(r, 2, {"name": "Laptop HP", "price": "120000", "category": "laptops", "stock": "8"})
-    
-    # Tester le panier
-    add_to_cart(r, "user:42", 1, 2)
-    add_to_cart(r, "user:42", 2, 1)
-    print("Panier:", get_cart(r, "user:42"))
-    
-    # Tester l'historique
-    for pid in [1, 2, 1, 3, 2]:
-        record_view(r, "user:42", pid)
-    print("Historique:", get_history(r, "user:42"))
+    r.flushdb()
+    store_product(r, "p101", {"label": "Phone", "cost": "500"})
+    add_to_cart(r, "u42", "p101", 1)
+    print("Basket:", get_cart(r, "u42"))
+    for x in ["p1", "p2", "p1"]: record_view(r, "u42", x)
+    print("Recent:", get_history(r, "u42"))
